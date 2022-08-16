@@ -7,11 +7,11 @@ use serenity::model::application::interaction::{Interaction, InteractionResponse
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 
-// sins required for the shutdown command
-use std::sync::Arc;
-use serenity::client::bridge::gateway::ShardManager;
-// more sin required for shutdown command
-static mut SHARD_MANAGER : Option<Arc<Mutex<ShardManager>>> = None;
+// needed for shutdown command
+use lazy_static::lazy_static;
+use std::sync::mpsc::{Sender, channel};
+
+lazy_static! { static ref SHUTDOWN_SENDER: Mutex<Option<Sender<bool>>> = Mutex::new(None); }
 
 struct Handler;
 
@@ -24,10 +24,12 @@ impl EventHandler for Handler {
             let content = match command.data.name.as_str() {
                 "ping" => "Hey, I'm alive!".to_string(),
                 "shutdown" => {
-                    unsafe {
-                        SHARD_MANAGER.as_ref().expect("Shutdown called before shard manager reference stored??").lock().await.shutdown_all().await;
-                    }
-                    "This might not send".to_string()
+                    let lock = SHUTDOWN_SENDER.lock().await;
+                    let sender = &lock.as_ref().expect("Shutdown command called before shutdown channel initialized??");
+                    sender.send(true).expect("Shutdown message send error");
+                    drop(lock);
+                    println!("Passing shutdown message");
+                    "Shutting down...".to_string()
                 },
                 "id" => {
                     let options = command
@@ -194,7 +196,7 @@ impl EventHandler for Handler {
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() {
     // Configure the client with your Discord bot token in token.txt.
     let token = fs::read_to_string("token.txt").expect("Expected a token in token.txt");
@@ -205,20 +207,21 @@ async fn main() {
         .await
         .expect("Error creating client");
 
-    // Create a clone of the `Arc` containing the shard manager.
-    unsafe{
-        SHARD_MANAGER = Some(client.shard_manager.clone());
-    }
+    let (sender, receiver) = channel();
+    *SHUTDOWN_SENDER.lock().await = Some(sender);
+
+    let shard_manager = client.shard_manager.clone();
+
+    tokio::spawn(async move {
+        loop {
+            let b = receiver.recv().expect("Shutdown message pass error");
+            if b {
+                shard_manager.lock().await.shutdown_all().await;
+                println!("Shutdown shard manager");
+                break;
+            }
+        }
+    });
 
     println!("Client shutdown: {:?}", client.start().await);
-
-    // Finally, start a single shard, and start listening to events.
-    //
-    // Shards will automatically attempt to reconnect, and will perform
-    // exponential backoff until it reconnects.
-    /*
-    if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
-    }
-    */
 }
