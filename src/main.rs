@@ -7,6 +7,12 @@ use serenity::model::application::interaction::{Interaction, InteractionResponse
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 
+// sins required for the shutdown command
+use std::sync::Arc;
+use serenity::client::bridge::gateway::ShardManager;
+// more sin required for shutdown command
+static mut SHARD_MANAGER : Option<Arc<Mutex<ShardManager>>> = None;
+
 struct Handler;
 
 #[async_trait]
@@ -17,6 +23,12 @@ impl EventHandler for Handler {
 
             let content = match command.data.name.as_str() {
                 "ping" => "Hey, I'm alive!".to_string(),
+                "shutdown" => {
+                    unsafe {
+                        SHARD_MANAGER.as_ref().expect("Shutdown called before shard manager reference stored??").lock().await.shutdown_all().await;
+                    }
+                    "This might not send".to_string()
+                },
                 "id" => {
                     let options = command
                         .data
@@ -75,6 +87,9 @@ impl EventHandler for Handler {
             commands
                 .create_application_command(|command| {
                     command.name("ping").description("A ping command")
+                })
+                .create_application_command(|command| {
+                    command.name("shutdown").description("Shut down the bot")
                 })
                 .create_application_command(|command| {
                     command.name("id").description("Get a user id").create_option(|option| {
@@ -179,7 +194,7 @@ impl EventHandler for Handler {
     }
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     // Configure the client with your Discord bot token in token.txt.
     let token = fs::read_to_string("token.txt").expect("Expected a token in token.txt");
@@ -190,11 +205,20 @@ async fn main() {
         .await
         .expect("Error creating client");
 
+    // Create a clone of the `Arc` containing the shard manager.
+    unsafe{
+        SHARD_MANAGER = Some(client.shard_manager.clone());
+    }
+
+    println!("Client shutdown: {:?}", client.start().await);
+
     // Finally, start a single shard, and start listening to events.
     //
     // Shards will automatically attempt to reconnect, and will perform
     // exponential backoff until it reconnects.
+    /*
     if let Err(why) = client.start().await {
         println!("Client error: {:?}", why);
     }
+    */
 }
