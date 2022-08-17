@@ -45,7 +45,7 @@ async fn nyi_command(ctx: Context, command: ApplicationCommandInteraction) -> Re
 
 async fn ping_command(ctx: Context, command: ApplicationCommandInteraction) -> Result<(), SerenityError> {
     let start_time = Instant::now();
-    send_interaction_response_message(&ctx, &command, "Pong!").await?;
+    command.defer(&ctx.http).await?;
     let mut duration = start_time.elapsed().as_millis().to_string();
     duration.push_str(" ms");
     edit_interaction_response_message(&ctx, &command, duration).await?;
