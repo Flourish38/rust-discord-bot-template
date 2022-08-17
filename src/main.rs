@@ -5,6 +5,7 @@ use serenity::model::application::command::{Command, CommandOptionType};
 use serenity::model::application::interaction::application_command::CommandDataOptionValue;
 use serenity::model::application::interaction::{Interaction, InteractionResponseType};
 use serenity::model::gateway::Ready;
+use serenity::model::application::interaction::application_command::ApplicationCommandInteraction;
 use serenity::prelude::*;
 
 // needed for shutdown command
@@ -14,6 +15,16 @@ use std::sync::mpsc::{Sender, channel};
 lazy_static! { static ref SHUTDOWN_SENDER: Mutex<Option<Sender<bool>>> = Mutex::new(None); }
 
 struct Handler;
+
+// for some reason if you don't specify the return type the compiler doesn't figure it out
+async fn send_interaction_response_message(ctx: &Context, command: &ApplicationCommandInteraction, content: &String) -> Result<(), SerenityError> {
+    command.create_interaction_response(&ctx.http, |response| {
+            response
+                .kind(InteractionResponseType::ChannelMessageWithSource)
+                .interaction_response_data(|message| message.content(content))
+        })
+        .await
+}
 
 #[async_trait]
 impl EventHandler for Handler {
@@ -69,13 +80,7 @@ impl EventHandler for Handler {
                 _ => "not implemented :(".to_string(),
             };
 
-            if let Err(why) = command
-                .create_interaction_response(&ctx.http, |response| {
-                    response
-                        .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|message| message.content(content))
-                })
-                .await
+            if let Err(why) = send_interaction_response_message(&ctx, &command, &content).await
             {
                 println!("Cannot respond to slash command: {}", why);
             }
