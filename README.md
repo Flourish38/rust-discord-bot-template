@@ -1,1 +1,1 @@
-# mini-cactbot-rs
+# rust-discord-bot-template

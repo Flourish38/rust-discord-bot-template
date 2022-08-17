@@ -1,5 +1,5 @@
 [package]
-name = "mini-cactbot-rs"
+name = "template-bot"
 version = "0.1.0"
 edition = "2021"
 
