@@ -7,9 +7,10 @@ use serenity::async_trait;
 use serenity::model::application::command::Command;
 use serenity::model::application::interaction::{Interaction, InteractionResponseType};
 use serenity::model::gateway::Ready;
-use serenity::model::channel::Message;
 use serenity::model::application::interaction::application_command::ApplicationCommandInteraction;
 use serenity::model::id::UserId;
+use serenity::model::prelude::component::ButtonStyle;
+use serenity::model::prelude::interaction::message_component::MessageComponentInteraction;
 use serenity::prelude::*;
 
 // needed for shutdown command
@@ -32,11 +33,12 @@ async fn send_interaction_response_message<D>(ctx: &Context, command: &Applicati
         .await
 }
 
-async fn edit_interaction_response_message<D>(ctx: &Context, command: &ApplicationCommandInteraction, content: D) -> Result<Message, SerenityError> where D: ToString {
-    command.edit_original_interaction_response(&ctx.http, |response| {
-        response.content(content)
-    })
-    .await
+async fn handle_command(ctx: Context, command:ApplicationCommandInteraction) -> Result<(), SerenityError> {
+    match command.data.name.as_str() {
+        "ping" => ping_command(ctx, command).await,
+        "shutdown" => shutdown_command(ctx, command).await,
+        _ => nyi_command(ctx, command).await
+    }
 }
 
 async fn nyi_command(ctx: Context, command: ApplicationCommandInteraction) -> Result<(), SerenityError> {
@@ -48,7 +50,19 @@ async fn ping_command(ctx: Context, command: ApplicationCommandInteraction) -> R
     command.defer(&ctx.http).await?;
     let mut duration = start_time.elapsed().as_millis().to_string();
     duration.push_str(" ms");
-    edit_interaction_response_message(&ctx, &command, duration).await?;
+    command.edit_original_interaction_response(&ctx.http, |response| {
+        response.content(duration)
+        .components(|components| {
+            components
+                .create_action_row(|action_row| {
+                    action_row.create_button(|button| {
+                        button.style(ButtonStyle::Secondary)
+                            .emoji('🔄')
+                            .custom_id("refresh_ping")
+                    })
+                })
+        })
+    }).await?;
     Ok(())
 }
 
@@ -67,17 +81,59 @@ async fn shutdown_command(ctx: Context, command: ApplicationCommandInteraction) 
     Ok(())
 }
 
+async fn handle_component(ctx: Context, component: MessageComponentInteraction) -> Result<(), SerenityError> {
+    match component.data.custom_id.as_str() {
+        "refresh_ping" => ping_refresh_component(ctx, component).await,
+        _ => nyi_component(ctx, component).await
+    }
+}
+
+async fn ping_refresh_component(ctx: Context, component: MessageComponentInteraction) -> Result<(), SerenityError> {
+    let start_time = Instant::now();
+    component.defer(&ctx.http).await?;
+    let mut duration = start_time.elapsed().as_millis().to_string();
+    duration.push_str(" ms");
+    component.edit_original_interaction_response(&ctx.http, |response| {
+        response.content(duration)
+        .components(|components| {
+            components
+                .create_action_row(|action_row| {
+                    action_row.create_button(|button| {
+                        button.style(ButtonStyle::Secondary)
+                            .emoji('🔄')
+                            .custom_id("refresh_ping")
+                    })
+                })
+        })
+    }).await?;
+    Ok(())
+}
+
+async fn nyi_component(ctx: Context, component: MessageComponentInteraction) -> Result<(), SerenityError> {
+    let mut content = "\nComponent interaction not implemented.".to_string();
+    content.push_str(&component.message.content);
+    component.edit_original_interaction_response(&ctx.http, |response| {
+        response.content(content)
+    })
+    .await?;
+    Ok(())
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        if let Interaction::ApplicationCommand(command) = interaction {            
-            if let Err(why) = match command.data.name.as_str() {
-                "ping" => ping_command(ctx, command).await,
-                "shutdown" => shutdown_command(ctx, command).await,
-                _ => nyi_command(ctx, command).await
-            } {
-                println!("Cannot respond to slash command: {}", why);
-            };
+        match interaction {
+            Interaction::ApplicationCommand(command) => {
+                if let Err(why) = handle_command(ctx, command).await {
+                    println!("Cannot respond to slash command: {}", why);
+                };
+            },
+            Interaction::MessageComponent(component) => {
+                if let Err(why) = handle_component(ctx, component).await {
+                    println!("Cannot respond to message component: {}", why);
+                }
+            },
+            _ => println!("Unimplemented interaction: {}", interaction.kind().num())
         }
     }
 
