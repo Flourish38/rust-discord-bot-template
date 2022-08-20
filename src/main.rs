@@ -1,4 +1,6 @@
 // based on https://github.com/serenity-rs/serenity/blob/current/examples/e14_slash_commands/src/main.rs
+// you **shouldn't** need to modify this file at all, unless you want to use an interaction other than commands and components.
+// in that case, modify interaction_create below and create a separate module for it in another file.
 
 mod commands;
 mod components;
@@ -27,11 +29,13 @@ impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         match interaction {
             Interaction::ApplicationCommand(command) => {
+                // Commands are implemented in src/commands.rs
                 if let Err(why) = handle_command(ctx, command).await {
                     println!("Cannot respond to slash command: {}", why);
                 };
             },
             Interaction::MessageComponent(component) => {
+                // Components are implemented in src/components.rs
                 if let Err(why) = handle_component(ctx, component).await {
                     println!("Cannot respond to message component: {}", why);
                 }
@@ -42,19 +46,8 @@ impl EventHandler for Handler {
 
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
-
-        Command::set_global_application_commands(&ctx.http, |commands| {
-            commands
-                .create_application_command(|command| {
-                    command.name("help").description("Information on how to use the bot")
-                })
-                .create_application_command(|command| {
-                    command.name("ping").description("A ping command")
-                })
-                .create_application_command(|command| {
-                    command.name("shutdown").description("Shut down the bot")
-                })
-        })
+        
+        Command::set_global_application_commands(&ctx.http, create_commands)
         .await.expect("Failed to set application commands");
     }
 }
@@ -79,6 +72,7 @@ async fn main() {
     // Spawns a task that waits for the shutdown command, then shuts down the bot.
     tokio::spawn(async move {
         loop {
+            // I have left open the possibility of using b=false for something "softer" in case you need it.
             let b = receiver.recv().await.expect("Shutdown message pass error");
             if b {
                 shard_manager.lock().await.shutdown_all().await;
