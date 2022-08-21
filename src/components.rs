@@ -1,6 +1,5 @@
 use std::time::Instant;
 
-use serenity::model::application::interaction::InteractionResponseType;
 use serenity::model::prelude::interaction::message_component::MessageComponentInteraction;
 use serenity::prelude::*;
 
@@ -13,15 +12,8 @@ pub async fn handle_component(ctx: Context, component: MessageComponentInteracti
 }
 
 async fn nyi_component(ctx: Context, component: MessageComponentInteraction) -> Result<(), SerenityError> {
-    // This prepends a notice to the message that the component is implemented on.
-    // It does not remove the components from the message.
-    let mut content = "Component interaction not yet implemented.\n".to_string();
-    content.push_str(&component.message.content);
-    component.create_interaction_response(&ctx.http, |response| {
-        response.kind(InteractionResponseType::UpdateMessage)
-            .interaction_response_data(|data| {
-                data.content(content)
-            })
+    component.create_followup_message(&ctx.http, |response| {
+        response.content("Component interaction not yet implemented.").ephemeral(true)
     })
     .await?;
     Ok(())

@@ -1,10 +1,8 @@
 use crate::ADMIN_USERS;
 
-use std::time::{Instant, Duration};
+use std::time::Instant;
 
 use serenity::builder::CreateApplicationCommands;
-use tokio::time::sleep;
-
 use serenity::model::application::interaction::InteractionResponseType;
 use serenity::model::application::interaction::application_command::ApplicationCommandInteraction;
 use serenity::model::prelude::component::ButtonStyle;
@@ -17,11 +15,11 @@ use tokio::sync::mpsc::Sender;
 lazy_static! { pub static ref SHUTDOWN_SENDER: Mutex<Option<Sender<bool>>> = Mutex::new(None); }
 
 // for some reason if you don't specify the return type the compiler doesn't figure it out
-async fn send_interaction_response_message<D>(ctx: &Context, command: &ApplicationCommandInteraction, content: D) -> Result<(), SerenityError> where D: ToString {
+async fn send_interaction_response_message<D>(ctx: &Context, command: &ApplicationCommandInteraction, content: D, ephemeral: bool) -> Result<(), SerenityError> where D: ToString {
     command.create_interaction_response(&ctx.http, |response| {
             response
                 .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| message.content(content))
+                .interaction_response_data(|message| message.content(content).ephemeral(ephemeral))
         })
         .await
 }
@@ -51,7 +49,7 @@ pub async fn handle_command(ctx: Context, command:ApplicationCommandInteraction)
 }
 
 async fn nyi_command(ctx: Context, command: ApplicationCommandInteraction) -> Result<(), SerenityError> {
-    send_interaction_response_message(&ctx, &command, "This command hasn't been implemented. Try /help").await
+    send_interaction_response_message(&ctx, &command, "This command hasn't been implemented. Try /help", true).await
 }
 
 async fn help_command(ctx: Context, command: ApplicationCommandInteraction) -> Result<(), SerenityError> {
@@ -68,9 +66,12 @@ async fn help_command(ctx: Context, command: ApplicationCommandInteraction) -> R
 
 async fn ping_command(ctx: Context, command: ApplicationCommandInteraction) -> Result<(), SerenityError> {
     let start_time = Instant::now();
-    // Use awaiting the defer as a delay to calculate the ping.
+    // Use awaiting the message as a delay to calculate the ping.
     // This gives very inconsistent results, but imo is probably closer to what you want than a heartbeat ping.
-    command.defer(&ctx.http).await?;
+    command.create_interaction_response(&ctx.http, |response| {
+        response.kind(InteractionResponseType::DeferredChannelMessageWithSource)
+            .interaction_response_data(|data| data.ephemeral(true))
+    }).await?;
     let mut duration = start_time.elapsed().as_millis().to_string();
     duration.push_str(" ms");
     command.edit_original_interaction_response(&ctx.http, |response| {
@@ -92,19 +93,18 @@ async fn ping_command(ctx: Context, command: ApplicationCommandInteraction) -> R
 async fn shutdown_command(ctx: Context, command: ApplicationCommandInteraction) -> Result<(), SerenityError> {
     // The admin user list is in src/main.rs
     if !ADMIN_USERS.contains(&command.user.id) {
-        send_interaction_response_message(&ctx, &command, "You do not have permission.").await?;
-        sleep(Duration::from_secs(5)).await;
-        command.delete_original_interaction_response(&ctx.http).await?;
+        send_interaction_response_message(&ctx, &command, "You do not have permission.", true).await?;
         return Ok(())
     }
-    send_interaction_response_message(&ctx, &command, "Shutting down...").await?;
+    // no ? here, we don't want to return early if this fails
+    _ = send_interaction_response_message(&ctx, &command, "Shutting down...", true).await;
     // loosely based on https://stackoverflow.com/a/65456463
-    // keep the lock separate so we can release it later
+    // keep the lock separate because you have to (which is neat)
     let lock = SHUTDOWN_SENDER.lock().await;
-    let sender = &lock.as_ref().expect("Shutdown command called before shutdown channel initialized??");
+    // This error means that the shutdown channel is somehow not good, so we actually want to panic
+    let sender = lock.as_ref().expect("Shutdown command called before shutdown channel initialized??");
+    // If this errors, the receiver could not receive the message anyways, so we want to panic
     sender.send(true).await.expect("Shutdown message send error");
-    // I'm actually not sure this is necessary, but it was in the snippet I saw
-    drop(lock);
     println!("Passing shutdown message");
     // I'm pretty sure this is unnecessary but it makes me happier than not doing it
     ctx.shard.shutdown_clean();
