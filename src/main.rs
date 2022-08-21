@@ -8,7 +8,9 @@ mod components;
 use commands::*;
 use components::*;
 
-use std::fs;
+use std::env;
+
+use tokio::sync::mpsc;
 
 use serenity::async_trait;
 use serenity::model::application::command::Command;
@@ -17,10 +19,13 @@ use serenity::model::gateway::Ready;
 use serenity::model::id::UserId;
 use serenity::prelude::*;
 
-use lazy_static::lazy_static;
-use tokio::sync::mpsc::channel;
+use config::{Config, File, ConfigError};
 
-lazy_static! { static ref ADMIN_USERS: Vec<UserId> = vec![UserId(165216105197993984)]; }
+use lazy_static::lazy_static;
+
+// Technically this initial vec is never used but it makes it so you don't need to use an expect() whenever you use the variable.
+// Also, according to the docs, vecs of size 0 don't allocate any memory anyways, so it literally doesn't matter.
+lazy_static! { static ref ADMIN_USERS: Mutex<Vec<UserId>> = Mutex::new(vec![]); }
 
 struct Handler;
 
@@ -52,10 +57,35 @@ impl EventHandler for Handler {
     }
 }
 
+fn build_config() -> Result<Config, ConfigError> {
+    Config::builder()
+        .add_source(File::with_name("config"))
+        .set_default("admins", Vec::<u64>::new())?
+        .set_override_option("token", env::var("DISCORD_TOKEN").ok())?
+        .build()
+}
+
 #[tokio::main]
 async fn main() {
-    // Configure the client with your Discord bot token in token.txt.
-    let token = fs::read_to_string("token.txt").expect("Expected a token in token.txt");
+    // Configure the client with your Discord bot token in your `config` file.
+    let config = build_config().expect("Config failed");
+
+    let token = config.get_string("token").expect("Token not found. Either:\n
+                                                                    - put it in the `config` file (token = \"token\")\n
+                                                                    - set environment variable DISCORD_TOKEN\n
+                                                                    - pass it as the first command line argument.\n");
+
+    let admins = config.get_array("admins")
+                                    .expect("Somehow failed to get admin list even though there is a default value??")
+                                    .iter().map(|val| {
+                                        UserId(val.clone().into_uint().expect("Failed to parse admin list entry into UserId"))
+                                    }).collect::<Vec<UserId>>();
+
+    if admins.is_empty() {
+        println!("WARNING: No admin users specified! By default, any user will be able to shut down your bot.");
+    }
+
+    *ADMIN_USERS.lock().await = admins;
 
     // Build our client.
     let mut client = Client::builder(token, GatewayIntents::empty())
@@ -64,7 +94,7 @@ async fn main() {
         .expect("Error creating client");
 
     // Channel for the shutdown command to use later
-    let (sender, mut receiver) = channel(64);
+    let (sender, mut receiver) = mpsc::channel(64);
     *SHUTDOWN_SENDER.lock().await = Some(sender);
 
     let shard_manager = client.shard_manager.clone();
@@ -83,5 +113,9 @@ async fn main() {
     });
 
     // Start the client.
-    println!("Client shutdown: {:?}", client.start().await);
+    match client.start().await {
+        Err(why) => println!("Client error: {}", why),
+        Ok(_) => println!("Client shutdown cleanly")
+    }
+    
 }

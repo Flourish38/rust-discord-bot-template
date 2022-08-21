@@ -91,11 +91,13 @@ async fn ping_command(ctx: Context, command: ApplicationCommandInteraction) -> R
 }
 
 async fn shutdown_command(ctx: Context, command: ApplicationCommandInteraction) -> Result<(), SerenityError> {
-    // The admin user list is in src/main.rs
-    if !ADMIN_USERS.contains(&command.user.id) {
+    // Set your admin user list in your config file
+    let admins = ADMIN_USERS.lock().await;
+    if !admins.is_empty() && !admins.contains(&command.user.id) {
         send_interaction_response_message(&ctx, &command, "You do not have permission.", true).await?;
         return Ok(())
     }
+    println!("Shutdown from user {} with Id {}", command.user.name, command.user.id);
     // no ? here, we don't want to return early if this fails
     _ = send_interaction_response_message(&ctx, &command, "Shutting down...", true).await;
     // loosely based on https://stackoverflow.com/a/65456463
@@ -105,7 +107,7 @@ async fn shutdown_command(ctx: Context, command: ApplicationCommandInteraction) 
     let sender = lock.as_ref().expect("Shutdown command called before shutdown channel initialized??");
     // If this errors, the receiver could not receive the message anyways, so we want to panic
     sender.send(true).await.expect("Shutdown message send error");
-    println!("Passing shutdown message");
+    println!("Passed shutdown message");
     // I'm pretty sure this is unnecessary but it makes me happier than not doing it
     ctx.shard.shutdown_clean();
     Ok(())
