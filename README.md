@@ -18,7 +18,9 @@ If you would rather, you can instead provide your token by the environment varia
 Once you decide on a file format for your config file, you can disable the ones you aren't using in `Cargo.toml` according to [config-rs features](hhttps://github.com/mehcode/config-rs#feature-flags).
 
 From there, add more commands in `src/commands.rs`, and implement any necessary components in `src/components.rs`.
-You ***shouldn't*** need to modify `src/main.rs` at all unless you need a different interaction type or more config values.
+You ***shouldn't*** need to modify `src/main.rs` at all, since the config is accessible as a static variable.
+The only exception is if you need to use a different type of interaction than commands and components,
+which you could simply add to the match statement on line 39 of `src/main.rs`.
 
 
 Template made by [Flourish38](https://github.com/Flourish38).

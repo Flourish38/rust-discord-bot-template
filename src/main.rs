@@ -27,6 +27,10 @@ use lazy_static::lazy_static;
 // Also, according to the docs, vecs of size 0 don't allocate any memory anyways, so it literally doesn't matter.
 lazy_static! { static ref ADMIN_USERS: Mutex<Vec<UserId>> = Mutex::new(vec![]); }
 
+// Unused by default, but useful in case you need it.
+// If you put `use crate::CONFIG;` in another file, it will include this, and you will have access to the raw config values for your own use.
+lazy_static! { static ref CONFIG: Mutex<Config> = Mutex::new(Config::default()); }
+
 struct Handler;
 
 #[async_trait]
@@ -72,8 +76,7 @@ async fn main() {
 
     let token = config.get_string("token").expect("Token not found. Either:\n
                                                                     - put it in the `config` file (token = \"token\")\n
-                                                                    - set environment variable DISCORD_TOKEN\n
-                                                                    - pass it as the first command line argument.\n");
+                                                                    - set environment variable DISCORD_TOKEN.\n");
 
     let admins = config.get_array("admins")
                                     .expect("Somehow failed to get admin list even though there is a default value??")
@@ -86,6 +89,8 @@ async fn main() {
     }
 
     *ADMIN_USERS.lock().await = admins;
+
+    *CONFIG.lock().await = config;
 
     // Build our client.
     let mut client = Client::builder(token, GatewayIntents::empty())
