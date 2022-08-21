@@ -10,7 +10,7 @@ You can also specify admin users in an array with the key "admins". By default, 
 For example, a file `config.toml` would look like
 ```toml
 token = "TOKEN_GOES_HERE"
-admins = [ your_user_id ]
+admins = [ 123456789876543210 ]
 ```
 
 If you would rather, you can instead provide your token by the environment variable DISCORD_TOKEN.
