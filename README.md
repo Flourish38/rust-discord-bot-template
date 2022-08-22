@@ -13,7 +13,12 @@ token = "TOKEN_GOES_HERE"
 admins = [ 123456789876543210 ]
 ```
 
-If you would rather, you can instead provide your token via the environment variable `DISCORD_TOKEN`.
+A default configuration file is provided at `src/config.toml`.
+In order to use it, simply move it out of `src/`. It should be in the same directory as `Cargo.toml`.
+This will mean that the config file is untracked by default,
+which is important so you ***don't commit your discord token to a public repository.***
+
+Alternatively, you can instead provide your token via the environment variable `DISCORD_TOKEN`.
 This will override the value provided in the config file, if any.
 
 Once you decide on a file format for your config file, you can disable the ones you aren't using in `Cargo.toml`
