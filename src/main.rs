@@ -85,7 +85,7 @@ async fn main() {
                                     }).collect::<Vec<UserId>>();
 
     if admins.is_empty() {
-        println!("WARNING: No admin users specified! By default, any user will be able to shut down your bot.");
+        println!("\tWARNING: No admin users specified! By default, any user will be able to shut down your bot.");
     }
 
     *ADMIN_USERS.lock().await = admins;
