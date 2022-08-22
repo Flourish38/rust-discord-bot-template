@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use serenity::model::prelude::interaction::InteractionResponseType;
 use serenity::model::prelude::interaction::message_component::MessageComponentInteraction;
 use serenity::prelude::*;
 
@@ -12,11 +13,12 @@ pub async fn handle_component(ctx: Context, component: MessageComponentInteracti
 }
 
 async fn nyi_component(ctx: Context, component: MessageComponentInteraction) -> Result<(), SerenityError> {
-    component.create_followup_message(&ctx.http, |response| {
-        response.content("Component interaction not yet implemented.").ephemeral(true)
-    })
-    .await?;
-    Ok(())
+    component.create_interaction_response(&ctx.http, |response| {
+        response.kind(InteractionResponseType::ChannelMessageWithSource)
+            .interaction_response_data(|message| {
+                message.content("Component interaction not yet implemented.").ephemeral(true)
+            })
+    }).await
 }
 
 async fn ping_refresh_component(ctx: Context, component: MessageComponentInteraction) -> Result<(), SerenityError> {
